@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compute intersurface distances between two Freesurfer surfaces
+Compute inter-editor distances between Freesurfer surfaces
 
 Requirements:
 Strict edited subject naming convention: <base subject name>-<editor name>
@@ -75,18 +75,16 @@ def main():
 
     # Parse subject directory listing for unique subjects and editors
     subjects, editors = parse_subj_dirs(subjects_dir)
-
-    n_subjects = len(subjects)
     n_editors = len(editors)
+
+    # Hemisphere and surface names
+    hemis = ['lh', 'rh']
+    surfnames = ['pial', 'white']
 
     # Multiprocessing setup
     n_cpu = psutil.cpu_count(logical=False)
     print('Creating pool of {} processes'.format(n_cpu))
     pool = mp.Pool(n_cpu)
-
-    # Hemisphere and surface names
-    hemis = ['lh', 'rh']
-    surfnames = ['pial', 'white']
 
     compare_args = []
     for subject in subjects:
@@ -95,7 +93,7 @@ def main():
 
                 # Upper triangle loop for editor pairs
                 for ic in range(0, n_editors-1):
-                    for jc in range (ic+1, n_editors):
+                    for jc in range(ic+1, n_editors):
 
                         editor1 = editors[ic]
                         editor2 = editors[jc]
@@ -112,8 +110,11 @@ def main():
 
     # Save results list
     results_csv = os.path.join(args.outdir, 'Hausdorff_Distances.csv')
+    print('Saving Hausdorff Distances to {}'.format(results_csv))
     df = pd.DataFrame(result, columns=['Subject', 'Editor1', 'Editor2', 'Hemisphere', 'Surface', 'D12', 'D21', 'DSYM'])
     df.to_csv(results_csv, sep=',', index=False)
+
+    print('Done')
 
 def parse_subj_dirs(subjects_dir):
 
@@ -153,68 +154,78 @@ def compare_editors(subjects_dir, outdir, subject, editor1, editor2, hemi, surfn
     surf1_fname = os.path.join(subj_dir1, 'surf', '{}.{}'.format(hemi, surfname))
     surf2_fname = os.path.join(subj_dir2, 'surf', '{}.{}'.format(hemi, surfname))
 
+    # Init Hausdorff distance return values
+    d12, d21, dsym = np.nan, np.nan, np.nan
+
+    # Init continuation flag
+    keep_going = True
+    coords1 = np.zeros([1,])
+    coords2 = np.zeros([1,])
+
     if not os.path.isfile(surf1_fname):
         print('* Subject 1 surface file {} does not exist - exiting'.format(surf1_fname))
-        sys.exit(1)
+        keep_going = False
 
     if not os.path.isfile(surf2_fname):
         print('* Subject 2 surface file {} does not exist - exiting'.format(surf2_fname))
-        sys.exit(1)
+        keep_going = False
 
     # Load surfaces
     try:
         coords1, faces1 = read_geometry(surf1_fname)
     except IOError:
         print('* Problem loading surface from {}'.format(surf1_fname))
-        sys.exit(1)
+        keep_going = False
 
     try:
         coords2, faces2 = read_geometry(surf2_fname)
     except IOError:
         print('* Problem loading surface from {}'.format(surf2_fname))
-        sys.exit(1)
+        keep_going = False
 
-    print('{}-{}-{}-{} mesh has {} points'.format(subject, editor1, hemi, surfname, coords1.shape[0]))
-    print('{}-{}-{}-{} mesh has {} points'.format(subject, editor2, hemi, surfname, coords2.shape[0]))
+    if keep_going:
 
-    # Fast pairwise Euclidean distances between nodes of surface 1 and 2
-    # If coords1 is N x 3 and coords2 is M x 3, distmin is N x M
-    print('Computing pairwise distances ({} to {})'.format(editor1, editor2))
-    t0 = dt.now()
-    _, dmin12 = pairwise_distances_argmin_min(coords1, coords2)
-    delta = dt.now() - t0
-    print('Done in {:0.3f} seconds'.format(delta.total_seconds()))
+        print('{}-{}-{}-{} mesh has {} points'.format(subject, editor1, hemi, surfname, coords1.shape[0]))
+        print('{}-{}-{}-{} mesh has {} points'.format(subject, editor2, hemi, surfname, coords2.shape[0]))
 
-    # Calculate forward Hausdorff distance from pairwise distance results
-    d12 = np.max(dmin12)
+        # Fast pairwise Euclidean distances between nodes of surface 1 and 2
+        # If coords1 is N x 3 and coords2 is M x 3, distmin is N x M
+        print('Computing pairwise distances ({} to {})'.format(editor1, editor2))
+        t0 = dt.now()
+        _, dmin12 = pairwise_distances_argmin_min(coords1, coords2)
+        delta = dt.now() - t0
+        print('Done in {:0.3f} seconds'.format(delta.total_seconds()))
 
-    # Fast Hausdorff distances between nodes of surface 1 and 2
-    print('Computing Fast Hausdorff Distances')
-    t0 = dt.now()
-    d21, _, _ = directed_hausdorff(coords2, coords1)
-    delta = dt.now() - t0
-    print('Done in {:0.3f} seconds'.format(delta.total_seconds()))
+        # Calculate forward Hausdorff distance from pairwise distance results
+        d12 = np.max(dmin12)
 
-    # Symmetric Hausdorff distance (max(d12, d21))
-    dsym = max(d12, d21)
+        # Fast Hausdorff distances between nodes of surface 1 and 2
+        print('Computing Fast Hausdorff Distances')
+        t0 = dt.now()
+        d21, _, _ = directed_hausdorff(coords2, coords1)
+        delta = dt.now() - t0
+        print('Done in {:0.3f} seconds'.format(delta.total_seconds()))
 
-    print('Forward Hausdorff Distance   : {:0.3f} mm'.format(d12))
-    print('Reverse Hausdorff Distance   : {:0.3f} mm'.format(d21))
-    print('Symmetric Hausdorff Distance : {:0.3f} mm'.format(dsym))
+        # Symmetric Hausdorff distance (max(d12, d21))
+        dsym = max(d12, d21)
 
-    # Save closest distances as a morphometry/curv file
-    dist_fname = os.path.join(outdir, '{}-{}-{}-{}-{}.dist'.format(subject, editor1, editor2, hemi, surfname))
-    print('Saving intersurface distances to {}'.format(dist_fname))
-    write_morph_data(dist_fname, dmin12)
+        print('Forward Hausdorff Distance   : {:0.3f} mm'.format(d12))
+        print('Reverse Hausdorff Distance   : {:0.3f} mm'.format(d21))
+        print('Symmetric Hausdorff Distance : {:0.3f} mm'.format(dsym))
 
-    # Copy subject 1 surface to output directory for use with distance annotation in Freeview
-    surf1_bname = os.path.basename(surf1_fname)
-    surf1_outname = '{}-{}-{}'.format(subject, editor1, surf1_bname)
-    print('Copying {} to {}'.format(surf1_bname, surf1_outname))
-    shutil.copy(surf1_fname, surf1_outname)
+        # Save closest distances as a morphometry/curv file
+        dist_fname = os.path.join(outdir, '{}-{}-{}-{}-{}.dist'.format(subject, editor1, editor2, hemi, surfname))
+        print('Saving intersurface distances to {}'.format(dist_fname))
+        write_morph_data(dist_fname, dmin12)
+
+        # Copy subject 1 surface to output directory for use with distance annotation in Freeview
+        surf1_bname = os.path.basename(surf1_fname)
+        surf1_outname = '{}-{}-{}'.format(subject, editor1, surf1_bname)
+        print('Copying {} to {}'.format(surf1_bname, surf1_outname))
+        shutil.copy(surf1_fname, os.path.join(outdir, surf1_outname))
 
     return subject, editor1, editor2, hemi, surfname, d12, d21, dsym
 
-# This is the standard boilerplate that calls the main() function.
+
 if __name__ == '__main__':
     main()

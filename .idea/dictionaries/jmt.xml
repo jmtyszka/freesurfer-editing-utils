@@ -2,7 +2,11 @@
   <dictionary name="jmt">
     <words>
       <w>coords</w>
+      <w>dsym</w>
       <w>freesurfer</w>
+      <w>hemis</w>
+      <w>outdir</w>
+      <w>surfnames</w>
     </words>
   </dictionary>
 </component>
