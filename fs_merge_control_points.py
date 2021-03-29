@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Merge two sets of Freeview/Freesurfer control points
 - used during editing for adjusting bias correction of white matter segment
