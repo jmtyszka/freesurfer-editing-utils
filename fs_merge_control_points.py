@@ -140,17 +140,27 @@ def main():
 
     # Loop over points in second set, checking for distance to points in first set
     cps = cp1.copy()
-    d_min = 1e30
 
     for p2 in cp2:
+
+        # Init closest distance and point in set 1
+        d_min = 1e30
+        p1_closest = np.array([-1, -1, -1])
 
         for p1 in cp1:
             d = np.linalg.norm(p1-p2)
             if d < d_min:
                 d_min = d
+                p1_closest = p1
 
         if d_min > d_tol:
             cps = np.vstack([cps, p2])
+        else:
+            print('1:[{:6.1f}, {:6.1f}, {:6.1f}] close to 2:[{:6.1f}, {:6.1f}, {:6.1f}]'.format(
+                p1_closest[0], p1_closest[1], p1_closest[2],
+                p2[0], p2[1], p2[2],
+                d_min)
+            )
 
     print('Merge summary')
     print('  {} points in {}'.format(cp1.shape[0], cp1_fname))
