@@ -70,7 +70,7 @@ def load_cps(fname):
                     npnts = int(vals[1])
 
                 elif 'useRealRAS' in vals[0]:
-                    use_real_ras = bool(vals[1])
+                    use_real_ras = int(vals[1])
 
                 elif 'info' in vals[0]:
                     pass
@@ -97,7 +97,7 @@ def save_cps(fname, cps, ras_flag):
             fd.write('\n')
         fd.write('info\n')
         fd.write('numpoints {:d}\n'.format(cps.shape[0]))
-        fd.write('useRealRAS {:d}\n'.format(int(ras_flag)))
+        fd.write('useRealRAS {:d}\n'.format(ras_flag))
 
 
 def main():
